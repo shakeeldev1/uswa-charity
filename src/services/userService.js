@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { User } from "../models/User.js";
 import { sendSetPasswordEmail } from "./emailService.js";
+import { primaryClientUrl } from "../config/clientOrigins.js";
 
 const SET_PASSWORD_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -24,7 +25,7 @@ export const findOrCreateDonorAccount = async ({ name, email, phone }) => {
     setPasswordExpires: Date.now() + SET_PASSWORD_EXPIRY_MS,
   });
 
-  const setPasswordUrl = `${process.env.CLIENT_URL}/set-password/${rawToken}`;
+  const setPasswordUrl = `${primaryClientUrl}/set-password/${rawToken}`;
   await sendSetPasswordEmail({ to: normalizedEmail, name, setPasswordUrl }).catch((err) =>
     console.error("Failed to send set-password email:", err.message)
   );
