@@ -25,8 +25,10 @@ export const findOrCreateDonorAccount = async ({ name, email, phone }) => {
     setPasswordExpires: Date.now() + SET_PASSWORD_EXPIRY_MS,
   });
 
+  // Not awaited: the donation/account flow must complete and respond even if
+  // the mail server is slow, unreachable, or unconfigured.
   const setPasswordUrl = `${primaryClientUrl}/set-password/${rawToken}`;
-  await sendSetPasswordEmail({ to: normalizedEmail, name, setPasswordUrl }).catch((err) =>
+  sendSetPasswordEmail({ to: normalizedEmail, name, setPasswordUrl }).catch((err) =>
     console.error("Failed to send set-password email:", err.message)
   );
 

@@ -34,8 +34,10 @@ export const createUser = asyncHandler(async (req, res) => {
     setPasswordExpires: Date.now() + SET_PASSWORD_EXPIRY_MS,
   });
 
+  // Not awaited: account creation must succeed even if the mail server is
+  // slow, unreachable, or unconfigured (e.g. on a host without SMTP set up).
   const setPasswordUrl = `${primaryClientUrl}/set-password/${rawToken}`;
-  await sendSetPasswordEmail({ to: normalizedEmail, name, setPasswordUrl }).catch((err) =>
+  sendSetPasswordEmail({ to: normalizedEmail, name, setPasswordUrl }).catch((err) =>
     console.error("Failed to send set-password email:", err.message)
   );
 
