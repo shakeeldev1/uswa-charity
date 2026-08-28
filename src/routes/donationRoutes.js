@@ -3,6 +3,9 @@ import {
   createOrder,
   captureOrder,
   notifyBankTransfer,
+  getWiseAccountDetails,
+  notifyWiseTransfer,
+  checkWiseDonationStatus,
   createManualDonation,
   listDonations,
   getMyDonations,
@@ -19,6 +22,11 @@ router.post("/paypal/capture-order", captureOrder);
 
 // Public: guest or logged-in donor notifies us of a direct bank transfer
 router.post("/bank-transfer", notifyBankTransfer);
+
+// Public: guest or logged-in donor notifies us of (and checks on) a Wise transfer
+router.get("/wise/account-details", getWiseAccountDetails);
+router.post("/wise", notifyWiseTransfer);
+router.get("/wise/:id/status", checkWiseDonationStatus);
 
 // Logged-in donor
 router.get("/mine", protect, getMyDonations);

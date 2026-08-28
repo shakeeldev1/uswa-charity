@@ -22,14 +22,17 @@ const donationSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["paypal", "bank_transfer", "manual"],
+      enum: ["paypal", "bank_transfer", "wise", "manual"],
       default: "manual",
     },
     paypalOrderId: { type: String },
     paypalCaptureId: { type: String },
 
-    // Donor-supplied note (e.g. their own transfer reference) for bank_transfer donations.
+    // Donor-supplied note (their own transfer reference for bank_transfer, or
+    // the reference we generated for them to quote for wise) donations.
     transferReference: { type: String },
+    // Set once we auto-match the incoming payment on our Wise balance (see wiseService.js).
+    wiseTransactionId: { type: String },
 
     status: {
       type: String,

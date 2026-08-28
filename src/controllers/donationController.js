@@ -2,8 +2,17 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { Donation } from "../models/Donation.js";
 import { createPaypalOrder, capturePaypalOrder } from "../services/paypalService.js";
+import {
+  getReceiveAccountDetails,
+  findMatchingWiseTransaction,
+  generateWiseReference,
+} from "../services/wiseService.js";
 import { findOrCreateDonorAccount } from "../services/userService.js";
-import { sendDonationReceiptEmail, sendBankTransferNotificationEmail } from "../services/emailService.js";
+import {
+  sendDonationReceiptEmail,
+  sendBankTransferNotificationEmail,
+  sendWiseTransferNotificationEmail,
+} from "../services/emailService.js";
 
 // Step 1: donor submits the donation form (name/email/amount/campaign) and we
 // open a PayPal order. No account or DB record is created yet.
@@ -96,6 +105,91 @@ export const notifyBankTransfer = asyncHandler(async (req, res) => {
   }).catch((err) => console.error("Failed to send bank transfer notification email:", err.message));
 
   res.status(201).json({ success: true, donation });
+});
+
+// Public: the charity's Wise receive account details, shown so donors know
+// where to send their transfer.
+export const getWiseAccountDetails = asyncHandler(async (req, res) => {
+  const accounts = await getReceiveAccountDetails();
+  res.json({ success: true, accounts });
+});
+
+// Public: donor tells us they're sending (or about to send) a transfer via
+// Wise. We hand back a unique payment reference for them to quote — matching
+// on that reference is what lets us auto-confirm the donation later.
+export const notifyWiseTransfer = asyncHandler(async (req, res) => {
+  const { name, email, phone, amount, currency, campaign } = req.body;
+  if (!name || !email) {
+    throw new ApiError(400, "Name and email are required");
+  }
+  if (!amount || Number(amount) <= 0) {
+    throw new ApiError(400, "A valid donation amount is required");
+  }
+  if (!currency) {
+    throw new ApiError(400, "A currency is required");
+  }
+
+  const user = await findOrCreateDonorAccount({ name, email, phone });
+  const transferReference = generateWiseReference();
+
+  const donation = await Donation.create({
+    donor: user._id,
+    name,
+    email,
+    type: campaign ? "Campaign" : "One-time",
+    campaign: campaign || "General Fund",
+    isMonetary: true,
+    amount,
+    currency: currency.toUpperCase(),
+    paymentMethod: "wise",
+    transferReference,
+    status: "Pending",
+  });
+
+  sendWiseTransferNotificationEmail({
+    to: email,
+    name,
+    amount,
+    currency: donation.currency,
+    campaign: donation.campaign,
+    transferReference,
+  }).catch((err) => console.error("Failed to send Wise transfer notification email:", err.message));
+
+  res.status(201).json({ success: true, donation });
+});
+
+// Public: donor (or a poll from the donate page) asks us to re-check whether
+// their Wise transfer has arrived yet.
+export const checkWiseDonationStatus = asyncHandler(async (req, res) => {
+  const donation = await Donation.findById(req.params.id);
+  if (!donation) throw new ApiError(404, "Donation not found");
+  if (donation.paymentMethod !== "wise") {
+    throw new ApiError(400, "This donation was not made via Wise");
+  }
+
+  if (donation.status === "Pending") {
+    const match = await findMatchingWiseTransaction({
+      currency: donation.currency,
+      amount: donation.amount,
+      reference: donation.transferReference,
+    });
+
+    if (match) {
+      donation.status = "Confirmed";
+      donation.wiseTransactionId = match.referenceNumber || match.details?.paymentReference;
+      await donation.save();
+
+      sendDonationReceiptEmail({
+        to: donation.email,
+        name: donation.name,
+        amount: donation.amount,
+        currency: donation.currency,
+        campaign: donation.campaign,
+      }).catch((err) => console.error("Failed to send donation receipt email:", err.message));
+    }
+  }
+
+  res.json({ success: true, donation });
 });
 
 // Admin: manually log a donation that didn't go through PayPal (cash, in-kind, etc).

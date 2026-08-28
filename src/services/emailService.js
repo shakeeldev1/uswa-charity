@@ -71,6 +71,27 @@ export const sendBankTransferNotificationEmail = async ({ to, name, amount, curr
   });
 };
 
+export const sendWiseTransferNotificationEmail = async ({
+  to,
+  name,
+  amount,
+  currency,
+  campaign,
+  transferReference,
+}) => {
+  await sendMail({
+    to,
+    subject: "We've received your Wise transfer notification",
+    html: `
+      <p>Dear ${name},</p>
+      <p>Thank you for letting us know about your Wise transfer of <strong>${currency} ${amount}</strong> to <strong>${campaign}</strong>.</p>
+      <p>Please make sure your transfer uses the payment reference <strong>${transferReference}</strong> so we can match it automatically.</p>
+      <p>Your donation is marked as <strong>pending</strong> until we confirm the funds have arrived. We'll follow up once it's confirmed.</p>
+      <p>— USWA Charity</p>
+    `,
+  });
+};
+
 export const sendSetPasswordEmail = async ({ to, name, setPasswordUrl }) => {
   await sendMail({
     to,
