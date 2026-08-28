@@ -23,26 +23,41 @@ const getProfileId = async () => {
   if (cachedProfileId) return cachedProfileId;
 
   const profiles = await wiseFetch("/v2/profiles");
-  const profile = profiles.find((p) => p.type === "business") || profiles[0];
+  const profile = profiles.find((p) => p.type === "BUSINESS") || profiles[0];
   if (!profile) throw new ApiError(502, "No Wise profile is available for this API key");
 
   cachedProfileId = process.env.WISE_PROFILE_ID || profile.id;
   return cachedProfileId;
 };
 
-// Bank/receive details donors transfer to, per currency. The field set differs
-// by currency (IBAN vs sort code vs routing number) so callers should render
-// whatever fields come back rather than assuming a fixed schema.
+// Wise's raw response here is a rich "receive money" UI contract (legal
+// disclaimers, per-field help text, a pre-formatted share blob) rather than
+// flat bank fields, and its top-level `currency` is an object ({code, name}),
+// not a plain string. We flatten it into something simple to render:
+// { currency, currencyName, title, receiveOptions: [{ type, title, fields, shareText }] }.
 export const getReceiveAccountDetails = async () => {
   if (cachedAccountDetails && Date.now() - cachedAccountDetailsAt < ACCOUNT_DETAILS_CACHE_MS) {
     return cachedAccountDetails;
   }
 
   const profileId = await getProfileId();
-  const accountDetails = await wiseFetch(`/v1/profiles/${profileId}/account-details`);
-  const accounts = (Array.isArray(accountDetails) ? accountDetails : []).filter(
-    (account) => account.active !== false && account.currency
-  );
+  const rawAccounts = await wiseFetch(`/v1/profiles/${profileId}/account-details`);
+
+  const accounts = (Array.isArray(rawAccounts) ? rawAccounts : [])
+    .filter((account) => account.status === "ACTIVE" && account.currency?.code)
+    .map((account) => ({
+      currency: account.currency.code,
+      currencyName: account.currency.name,
+      title: account.title,
+      receiveOptions: (account.receiveOptions || []).map((option) => ({
+        type: option.type,
+        title: option.title,
+        fields: (option.details || [])
+          .filter((detail) => !detail.hidden && detail.body)
+          .map((detail) => ({ label: detail.title, value: detail.body })),
+        shareText: option.shareText,
+      })),
+    }));
 
   cachedAccountDetails = accounts;
   cachedAccountDetailsAt = Date.now();
